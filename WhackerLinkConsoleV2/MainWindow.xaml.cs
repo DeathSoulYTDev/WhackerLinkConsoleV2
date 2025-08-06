@@ -461,7 +461,11 @@ namespace WhackerLinkConsoleV2
                                     ChannelBox_PageButtonClicked(ch, ch);
                                 }
 
-                                await Task.Delay(2000); // Optional visual buffer
+                                if (i > 0)
+                                {
+                                    await Task.Delay(1750); // delay only after the first tone
+                                }
+
 
                                 // ▶️ Play the tone
                                 await PlayTone(selected.ToneA.ToString(), selected.ToneB.ToString());
