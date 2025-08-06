@@ -11,6 +11,9 @@ namespace WhackerLinkConsoleV2.Controls
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
+        internal LinearGradientBrush grayGradient;
+        internal LinearGradientBrush orangeGradient;
+
         public string ToneName { get; set; }
         public double ToneA { get; set; }
         public double ToneB { get; set; }
@@ -25,6 +28,27 @@ namespace WhackerLinkConsoleV2.Controls
         public ToneSet(string toneName, double toneA, double toneB)
         {
             InitializeComponent();
+            UpdateBackground();
+
+            grayGradient = new LinearGradientBrush
+            {
+                StartPoint = new Point(0.5, 0),
+                EndPoint = new Point(0.5, 1)
+            };
+
+            grayGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FFF0F0F0"), 0.485));
+            grayGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FFDCDCDC"), 0.517));
+
+            orangeGradient = new LinearGradientBrush
+            {
+                StartPoint = new Point(0.5, 0),
+                EndPoint = new Point(0.5, 1)
+            };
+
+            orangeGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FFFFAF00"), 0.485));
+            orangeGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FFEEA400"), 0.517));
+            ToneSetSelectBtn.Background = grayGradient;
+
             ToneName = toneName;
             ToneA = toneA;
             ToneB = toneB;
@@ -62,11 +86,16 @@ namespace WhackerLinkConsoleV2.Controls
 
         private void UpdateSelectButton()
         {
-            //if (ToneSetSelectBtn != null)
+            if (ToneSetSelectBtn != null)
             {
                 //ToneSetSelectBtn.Content = _isSelected ? "Deselect" : "Select";
-                //ToneSetSelectBtn.Background = _isSelected ? Brushes.LightGreen : Brushes.LightGray;
+                ToneSetSelectBtn.Background = _isSelected ? orangeGradient : grayGradient;
             }
+        }
+
+        private void UpdateBackground()
+        {
+            Background = _isSelected ? (Brush)new BrushConverter().ConvertFrom("#FF0B004B") : Brushes.DarkGray;
         }
     }
 }

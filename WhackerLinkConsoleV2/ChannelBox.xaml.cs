@@ -300,6 +300,7 @@ namespace WhackerLinkConsoleV2.Controls
         private void PageSelectButton_Click(object sender, RoutedEventArgs e)
         {
             if (!IsSelected) return;
+            
 
             PageState = !PageState;
             PageButtonClicked.Invoke(sender, this);

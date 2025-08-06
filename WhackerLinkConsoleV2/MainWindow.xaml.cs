@@ -429,6 +429,7 @@ namespace WhackerLinkConsoleV2
             {
                 foreach (var tone in Codeplug.Tones)
                 {
+
                     var toneSetControl = new ToneSet(tone.Name, tone.ToneA, tone.ToneB);
 
                     // Hook up events
@@ -447,34 +448,28 @@ namespace WhackerLinkConsoleV2
                                 var selected = selectedTones[i];
                                 var key = (selected.ToneA, selected.ToneB);
 
-                                // Check if any of the original channels have lost their PageState
-                                var prematurelyCleared = initiallyActiveChannels
-                                    .Where(c => !c.PageState)
-                                    .ToList();
-
-                                if (prematurelyCleared.Any())
+                                // ✅ Restore PageState for each tone before playback
+                                foreach (var ch in initiallyActiveChannels)
                                 {
-                                    // Pause logic: restore PageState for affected channels
-                                    foreach (var ch in prematurelyCleared)
+                                    ch.PageState = true;
+                                    Dispatcher.Invoke(() =>
                                     {
-                                        ch.PageState = true;
-                                        Dispatcher.Invoke(() =>
-                                        {
-                                            ch.PageSelectButton.Background = ch.orangeGradient;
-                                        });
-                                    }
+                                        ch.PageSelectButton.Background = ch.orangeGradient;
+                                    });
 
-                                    // Wait a moment to visually reflect the reset before continuing
-                                    await Task.Delay(300);
+                                    // This ensures PageState on the *server* is activated
+                                    ChannelBox_PageButtonClicked(ch, ch);
                                 }
 
-                                // Play the tone
+                                await Task.Delay(2000); // Optional visual buffer
+
+                                // ▶️ Play the tone
                                 await PlayTone(selected.ToneA.ToString(), selected.ToneB.ToString());
 
-                                // Remove from selected set
+                                // ❌ Remove from selected set
                                 _selectedToneSets.Remove(key);
 
-                                // Deselect the tone visually
+                                // 🔄 Deselect tone visually
                                 foreach (var child in ChannelsCanvas.Children)
                                 {
                                     if (child is ToneSet ts && ts.ToneA == key.ToneA && ts.ToneB == key.ToneB)
@@ -485,21 +480,24 @@ namespace WhackerLinkConsoleV2
                                 }
                             }
 
-                            // Now that all tones are done, clean up page state
+                            // 🧹 Final cleanup: clear PageState on all initially active channels
                             foreach (var ch in initiallyActiveChannels)
                             {
                                 ch.PageState = false;
-                                ch.PageSelectButton.Background = ch.grayGradient;
+                                Dispatcher.Invoke(() =>
+                                {
+                                    ch.PageSelectButton.Background = ch.grayGradient;
+                                });
                             }
                         }
                         else
                         {
+                            // 🔁 Single tone fallback
                             var hasActivePage = _selectedChannelsManager.GetSelectedChannels().Any(c => c.PageState);
                             if (hasActivePage)
                             {
                                 await PlayTone(tone.ToneA.ToString(), tone.ToneB.ToString());
 
-                                // Clear PageState after this tone
                                 foreach (var channel in _selectedChannelsManager.GetSelectedChannels())
                                 {
                                     channel.PageState = false;
