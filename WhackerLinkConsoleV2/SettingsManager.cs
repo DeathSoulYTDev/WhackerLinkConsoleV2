@@ -32,6 +32,8 @@ namespace WhackerLinkConsoleV2
         public bool ShowAlertTones { get; set; } = true;
         public bool ShowQCTones { get; set; } = true;
 
+        public bool DebugMode { get; set; } = false;
+
         public string LastCodeplugPath { get; set; } = null;
 
         public Dictionary<string, ChannelPosition> ChannelPositions { get; set; } = new Dictionary<string, ChannelPosition>();
@@ -52,6 +54,7 @@ namespace WhackerLinkConsoleV2
 
                 if (loadedSettings != null)
                 {
+                    DebugMode = loadedSettings.DebugMode;
                     ShowSystemStatus = loadedSettings.ShowSystemStatus;
                     ShowChannels = loadedSettings.ShowChannels;
                     ShowAlertTones = loadedSettings.ShowAlertTones;
@@ -71,6 +74,12 @@ namespace WhackerLinkConsoleV2
             }
         }
 
+
+        public void ToggleDebugMode()
+        {
+            DebugMode = !DebugMode;
+            SaveSettings();
+        }
         public void UpdateAlertTonePaths(string newFilePath)
         {
             if (!AlertToneFilePaths.Contains(newFilePath))

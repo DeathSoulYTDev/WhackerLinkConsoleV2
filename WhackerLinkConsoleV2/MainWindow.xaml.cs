@@ -48,7 +48,7 @@ using fnecore.P25.LC.TSBK;
 using WebSocketSharp;
 using NWaves.Signals;
 using static WhackerLinkConsoleV2.P25Crypto;
-using static WhackerLinkLib.Models.Radio.Codeplug;
+//using static WhackerLinkLib.Models.Radio.Codeplug;
 using System.Threading.Channels;
 
 namespace WhackerLinkConsoleV2
@@ -66,7 +66,9 @@ namespace WhackerLinkConsoleV2
         private double _offsetY;
         private bool _isDragging;
 
+        public List<string> AllowedZones { get; set; }
         private SettingsManager _settingsManager = new SettingsManager();
+        private Dictionary<string, Canvas> _zoneCanvases = new Dictionary<string, Canvas>();
         private SelectedChannelsManager _selectedChannelsManager;
 
         private List<(double ToneA, double ToneB)> _selectedToneSets = new List<(double, double)>();
@@ -97,13 +99,23 @@ namespace WhackerLinkConsoleV2
 
         List<Tuple<uint, uint>> fneAffs = new List<Tuple<uint, uint>>();
 
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern bool AllocConsole();
+
         public MainWindow()
         {
 #if !DEBUG
             ConsoleNative.ShowConsole();
 #endif
             InitializeComponent();
+
             _settingsManager.LoadSettings();
+
+            if (_settingsManager.DebugMode)
+            {
+                ShowDebugConsole();
+            }
+
             _selectedChannelsManager = new SelectedChannelsManager();
             _flashingManager = new FlashingBackgroundManager(null, ChannelsCanvas, null, this);
             _emergencyAlertPlayback = new WaveFilePlaybackManager(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "emergency.wav"));
@@ -131,6 +143,22 @@ namespace WhackerLinkConsoleV2
         private class YamlConfig
         {
             public List<Codeplug.Tone> Tones { get; set; }
+            public List<Codeplug.Zone> Zones { get; set; }
+        }
+
+        public void ShowDebugConsole()
+        {
+            AllocConsole();
+            Console.WriteLine($"Debug Console: Active");
+            if (_settingsManager.DebugMode)
+            {
+                Console.WriteLine($"DebugMode: Enabled");
+            }
+        }
+
+        private void OpenDebugConsole_Click(object sender, RoutedEventArgs e)
+        {
+            ShowDebugConsole();
         }
 
         private void OpenCodeplug_Click(object sender, RoutedEventArgs e)
@@ -175,388 +203,340 @@ namespace WhackerLinkConsoleV2
             }
         }
 
+        //private void GenerateChannelWidgets()
+        //{
+        //    // Clear previous UI
+        //    ChannelsTabControl.Items.Clear();
+        //    ChannelsCanvas.Children.Clear();
+
+        //    double globalOffsetX = 20;
+        //    double globalOffsetY = 20;
+
+        //    if (Codeplug != null)
+        //    {
+        //        // 1. Add System Status Boxes (global)
+        //        foreach (var system in Codeplug.Systems)
+        //        {
+        //            AddSystemBox(system, ref globalOffsetX, ref globalOffsetY);
+        //        }
+
+        //        // 2. Add Zone Tabs (each tab gets its own ScrollViewer + Canvas)
+        //        foreach (var zone in Codeplug.Zones)
+        //        {
+        //            var tabItem = new TabItem { Header = zone.Name };
+
+        //            var scrollViewer = new ScrollViewer
+        //            {
+        //                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        //                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+        //            };
+
+        //            var zoneCanvas = new Canvas { Background = Brushes.Transparent };
+
+        //            scrollViewer.Content = zoneCanvas;
+        //            tabItem.Content = scrollViewer;
+        //            ChannelsTabControl.Items.Add(tabItem);
+
+        //            double offsetX = 20;
+        //            double offsetY = 20;
+
+        //            foreach (var channel in zone.Channels)
+        //            {
+        //                // Add the channel box without capturing a return value
+        //                AddChannelBox(channel, zoneCanvas, ref offsetX, ref offsetY);
+
+        //                // Dynamically expand canvas as needed
+        //                double requiredWidth = offsetX + 40;
+        //                double requiredHeight = offsetY + 40;
+        //                if (zoneCanvas.Width < requiredWidth)
+        //                    zoneCanvas.Width = requiredWidth;
+        //                if (zoneCanvas.Height < requiredHeight)
+        //                    zoneCanvas.Height = requiredHeight;
+        //            }
+        //        }
+
+
+
+
+        //        // 3. Add Playback Channel (global)
+        //        AddPlaybackChannel(globalOffsetX, globalOffsetY);
+
+        //        // 4. Add Alert Tones (global)
+        //        AddAlertTones(globalOffsetX, globalOffsetY);
+
+        //        // 5. Add QC ToneSets (global)
+        //        AddToneSets(globalOffsetX, globalOffsetY);
+        //    }
+
+        //    AdjustCanvasHeight();
+        //}
+
         private void GenerateChannelWidgets()
         {
-            ChannelsCanvas.Children.Clear();
-            double offsetX = 20;
-            double offsetY = 20;
+            // Clear previous UI
+            ChannelsTabControl.Items.Clear();
+
+            double globalOffsetX = 20;
+            double globalOffsetY = 20;
 
             if (Codeplug != null)
             {
+                // 1. Add System Status Boxes (global)
                 foreach (var system in Codeplug.Systems)
                 {
-                    var systemStatusBox = new SystemStatusBox(system.Name, system.Address, system.Port);
-
-                    if (_settingsManager.SystemStatusPositions.TryGetValue(system.Name, out var position))
-                    {
-                        Canvas.SetLeft(systemStatusBox, position.X);
-                        Canvas.SetTop(systemStatusBox, position.Y);
-                    }
-                    else
-                    {
-                        Canvas.SetLeft(systemStatusBox, offsetX);
-                        Canvas.SetTop(systemStatusBox, offsetY);
-                    }
-
-                    systemStatusBox.MouseLeftButtonDown += SystemStatusBox_MouseLeftButtonDown;
-                    systemStatusBox.MouseMove += SystemStatusBox_MouseMove;
-                    systemStatusBox.MouseRightButtonDown += SystemStatusBox_MouseRightButtonDown;
-
-                    ChannelsCanvas.Children.Add(systemStatusBox);
-
-                    offsetX += 225;
-                    if (offsetX + 220 > ChannelsCanvas.ActualWidth)
-                    {
-                        offsetX = 20;
-                        offsetY += 106;
-                    }
-
-                    if (File.Exists(system.AliasPath))
-                        system.RidAlias = AliasTools.LoadAliases(system.AliasPath);
-
-                    if (!system.IsDvm)
-                    {
-                        _webSocketManager.AddWebSocketHandler(system.Name);
-
-                        IPeer handler = _webSocketManager.GetWebSocketHandler(system.Name);
-                        handler.OnVoiceChannelResponse += HandleVoiceResponse;
-                        handler.OnVoiceChannelRelease += HandleVoiceRelease;
-                        handler.OnEmergencyAlarmResponse += HandleEmergencyAlarmResponse;
-                        handler.OnAudioData += HandleReceivedAudio;
-                        handler.OnAffiliationUpdate += HandleAffiliationUpdate;
-                        handler.OnCallAlert += HandleCallAlert;
-
-                        handler.OnUnitRegistrationResponse += (response) =>
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                if (response.Status == (int)ResponseType.GRANT)
-                                {
-                                    systemStatusBox.Background = (Brush)new BrushConverter().ConvertFrom("#FF00BC48");
-                                    systemStatusBox.ConnectionState = "Connected";
-
-                                    foreach (ChannelBox channel in _selectedChannelsManager.GetSelectedChannels())
-                                    {
-                                        if (channel.SystemName == PLAYBACKSYS || channel.ChannelName == PLAYBACKCHNAME || channel.DstId == PLAYBACKTG)
-                                            continue;
-
-                                        Codeplug.System system = Codeplug.GetSystemForChannel(channel.ChannelName);
-                                        Codeplug.Channel cpgChannel = Codeplug.GetChannelByName(channel.ChannelName);
-
-                                        if (!system.IsDvm)
-                                        {
-                                            IPeer handler = _webSocketManager.GetWebSocketHandler(system.Name);
-
-                                            if (channel.IsSelected && handler.IsConnected)
-                                            {
-                                                Console.WriteLine("sending WLINK master aff");
-
-                                                Task.Run(() =>
-                                                {
-                                                    GRP_AFF_REQ release = new GRP_AFF_REQ
-                                                    {
-                                                        SrcId = system.Rid,
-                                                        DstId = cpgChannel.Tgid,
-                                                        Site = system.Site
-                                                    };
-
-                                                    handler.SendMessage(release.GetData());
-                                                });
-                                            }
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    systemStatusBox.Background = new SolidColorBrush(Colors.Red);
-                                    systemStatusBox.ConnectionState = "Disconnected";
-                                }
-                            });
-                        };
-
-                        handler.OnClose += () =>
-                        {
-                            Dispatcher.Invoke(() =>
-                            {
-                                systemStatusBox.Background = new SolidColorBrush(Colors.Red);
-                                systemStatusBox.ConnectionState = "Disconnected";
-                            });
-                        };
-
-                        handler.OnOpen += () =>
-                        {
-                            Console.WriteLine("Peer connected");
-                            U_REG_REQ release = new U_REG_REQ
-                            {
-                                SrcId = system.Rid,
-                                Site = system.Site
-                            };
-
-                            handler.SendMessage(release.GetData());
-                        };
-
-                        handler.OnReconnecting += () =>
-                        {
-                            Console.WriteLine("Peer reconnecting");
-                        };
-
-                        Task.Run(() =>
-                        {
-                            handler.Connect(system.Address, system.Port, system.AuthKey);
-
-                            handler.OnGroupAffiliationResponse += (response) => { /* TODO */ };
-
-                            if (!handler.IsConnected)
-                            {
-                                systemStatusBox.Background = new SolidColorBrush(Colors.Red);
-                                systemStatusBox.ConnectionState = "Disconnected";
-                            }
-                        });
-                    } else {
-                        _fneSystemManager.AddFneSystem(system.Name, system, this);
-
-                        PeerSystem peer = _fneSystemManager.GetFneSystem(system.Name);
-
-                        peer.peer.PeerConnected += (sender, response) =>
-                        {
-                            Console.WriteLine("FNE Peer connected");
-
-                            Dispatcher.Invoke(() =>
-                            {
-                                systemStatusBox.Background = (Brush)new BrushConverter().ConvertFrom("#FF00BC48");
-                                systemStatusBox.ConnectionState = "Connected";
-                            });
-                        };
-
-
-                        peer.peer.PeerDisconnected += (response) =>
-                        {
-                            Console.WriteLine("FNE Peer disconnected");
-
-                            Dispatcher.Invoke(() =>
-                            {
-                                systemStatusBox.Background = new SolidColorBrush(Colors.Red);
-                                systemStatusBox.ConnectionState = "Disconnected";
-                            });
-                        };
-
-                        Task.Run(() =>
-                        {
-                            peer.Start();
-                        });
-                    }
-
-                    if (!_settingsManager.ShowSystemStatus)
-                        systemStatusBox.Visibility = Visibility.Collapsed;
-
+                    AddSystemBox(system, ref globalOffsetX, ref globalOffsetY);
                 }
-            }
 
-
-            if (_settingsManager.ShowChannels && Codeplug != null)
-            {
+                // 2. Add Zone Tabs
                 foreach (var zone in Codeplug.Zones)
                 {
+                    var tabItem = new TabItem { Header = zone.Name };
+
+                    var scrollViewer = new ScrollViewer
+                    {
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+                    };
+
+                    var zoneCanvas = new Canvas
+                    {
+                        Background = Brushes.Transparent,
+                        Width = 1000,
+                        Height = 800
+                    };
+
+                    scrollViewer.Content = zoneCanvas;
+                    tabItem.Content = scrollViewer;
+                    ChannelsTabControl.Items.Add(tabItem);
+
+                    double offsetX = 20;
+                    double offsetY = 20;
+
+                    // Add channels first
                     foreach (var channel in zone.Channels)
                     {
-                        var channelBox = new ChannelBox(_selectedChannelsManager, _audioManager, channel.Name, channel.System, channel.Tgid);
-
-                        //channelBox.crypter.AddKey(channel.GetKeyId(), channel.GetAlgoId(), channel.GetEncryptionKey());
-
-                        systemStatuses.Add(channel.Name, new SlotStatus());
-
-                        if (_settingsManager.ChannelPositions.TryGetValue(channel.Name, out var position))
-                        {
-                            Canvas.SetLeft(channelBox, position.X);
-                            Canvas.SetTop(channelBox, position.Y);
-                        }
-                        else
-                        {
-                            Canvas.SetLeft(channelBox, offsetX);
-                            Canvas.SetTop(channelBox, offsetY);
-                        }
-
-                        channelBox.PTTButtonClicked += ChannelBox_PTTButtonClicked;
-                        channelBox.PageButtonClicked += ChannelBox_PageButtonClicked;
-                        channelBox.HoldChannelButtonClicked += ChannelBox_HoldChannelButtonClicked;
-
-                        channelBox.MouseLeftButtonDown += ChannelBox_MouseLeftButtonDown;
-                        channelBox.MouseMove += ChannelBox_MouseMove;
-                        channelBox.MouseRightButtonDown += ChannelBox_MouseRightButtonDown;
-                        ChannelsCanvas.Children.Add(channelBox);
-
-                        offsetX += 225;
-
-                        if (offsetX + 220 > ChannelsCanvas.ActualWidth)
-                        {
-                            offsetX = 20;
-                            offsetY += 106;
-                        }
+                        AddChannelBox(channel, zoneCanvas, ref offsetX, ref offsetY);
                     }
-                }
-            }
 
-            if (_settingsManager.ShowAlertTones && Codeplug != null)
-            {
-                foreach (var alertPath in _settingsManager.AlertToneFilePaths)
-                {
-                    var alertTone = new AlertTone(alertPath)
+                    // Then add tones once for the zone
+                    AddToneSets(zoneCanvas, offsetX, offsetY, zone.Name);
+
+                    ChannelsCanvas = zoneCanvas;
+
+                    scrollViewer.Loaded += (s, e) =>
                     {
-                        IsEditMode = isEditMode
+                        var sv = s as ScrollViewer;
+                        if (sv?.Content is Canvas c)
+                        {
+                            if (sv.ViewportWidth > c.Width) c.Width = sv.ViewportWidth;
+                            if (sv.ViewportHeight > c.Height) c.Height = sv.ViewportHeight;
+                        }
                     };
-
-                    alertTone.OnAlertTone += SendAlertTone;
-
-                    if (_settingsManager.AlertTonePositions.TryGetValue(alertPath, out var position))
-                    {
-                        Canvas.SetLeft(alertTone, position.X);
-                        Canvas.SetTop(alertTone, position.Y);
-                    }
-                    else
-                    {
-                        Canvas.SetLeft(alertTone, 20);
-                        Canvas.SetTop(alertTone, 20);
-                    }
-
-                    alertTone.MouseRightButtonUp += AlertTone_MouseRightButtonUp;
-
-                    ChannelsCanvas.Children.Add(alertTone);
                 }
             }
+        }
 
-            // Add ToneSet boxes if enabled
-            if (_settingsManager.ShowQCTones && Codeplug != null && Codeplug?.Tones != null)
+        // ---------------------- Helper Methods ----------------------
+
+        private void AddSystemBox(Codeplug.System system, ref double offsetX, ref double offsetY)
+        {
+            var systemStatusBox = new SystemStatusBox(system.Name, system.Address, system.Port);
+
+            if (_settingsManager.SystemStatusPositions.TryGetValue(system.Name, out var pos))
             {
-                foreach (var tone in Codeplug.Tones)
+                Canvas.SetLeft(systemStatusBox, pos.X);
+                Canvas.SetTop(systemStatusBox, pos.Y);
+            }
+            else
+            {
+                Canvas.SetLeft(systemStatusBox, offsetX);
+                Canvas.SetTop(systemStatusBox, offsetY);
+            }
+
+            systemStatusBox.MouseLeftButtonDown += SystemStatusBox_MouseLeftButtonDown;
+            systemStatusBox.MouseMove += SystemStatusBox_MouseMove;
+            systemStatusBox.MouseRightButtonDown += SystemStatusBox_MouseRightButtonDown;
+
+            ChannelsCanvas.Children.Add(systemStatusBox);
+
+            offsetX += 225;
+            if (offsetX + 220 > ChannelsCanvas.ActualWidth)
+            {
+                offsetX = 20;
+                offsetY += 106;
+            }
+
+            if (File.Exists(system.AliasPath))
+                system.RidAlias = AliasTools.LoadAliases(system.AliasPath);
+
+            if (!system.IsDvm)
+                SetupWebSocketHandler(system, systemStatusBox);
+            else
+                SetupFneSystem(system, systemStatusBox);
+
+            if (!_settingsManager.ShowSystemStatus)
+                systemStatusBox.Visibility = Visibility.Collapsed;
+        }
+
+        private void SetupWebSocketHandler(Codeplug.System system, SystemStatusBox systemStatusBox)
+        {
+            _webSocketManager.AddWebSocketHandler(system.Name);
+
+            IPeer handler = _webSocketManager.GetWebSocketHandler(system.Name);
+
+            handler.OnVoiceChannelResponse += HandleVoiceResponse;
+            handler.OnVoiceChannelRelease += HandleVoiceRelease;
+            handler.OnEmergencyAlarmResponse += HandleEmergencyAlarmResponse;
+            handler.OnAudioData += HandleReceivedAudio;
+            handler.OnAffiliationUpdate += HandleAffiliationUpdate;
+            handler.OnCallAlert += HandleCallAlert;
+
+            handler.OnUnitRegistrationResponse += (response) =>
+            {
+                Dispatcher.Invoke(() =>
                 {
-
-                    var toneSetControl = new ToneSet(tone.Name, tone.ToneA, tone.ToneB);
-
-                    // Hook up events
-                    toneSetControl.PlayClicked += async (s, e) =>
+                    if (response.Status == (int)ResponseType.GRANT)
                     {
-                        if (_selectedToneSets.Count > 0)
+                        systemStatusBox.Background = (Brush)new BrushConverter().ConvertFrom("#FF00BC48");
+                        systemStatusBox.ConnectionState = "Connected";
+
+                        // Send WLINK master aff for selected channels
+                        foreach (ChannelBox channel in _selectedChannelsManager.GetSelectedChannels())
                         {
-                            var selectedTones = _selectedToneSets.ToList();
-                            var initiallyActiveChannels = _selectedChannelsManager
-                                .GetSelectedChannels()
-                                .Where(c => c.PageState)
-                                .ToList();
+                            if (channel.SystemName == PLAYBACKSYS || channel.ChannelName == PLAYBACKCHNAME || channel.DstId == PLAYBACKTG)
+                                continue;
 
-                            for (int i = 0; i < selectedTones.Count; i++)
+                            Codeplug.System sys = Codeplug.GetSystemForChannel(channel.ChannelName);
+                            Codeplug.Channel cpgChannel = Codeplug.GetChannelByName(channel.ChannelName);
+
+                            if (!sys.IsDvm)
                             {
-                                var selected = selectedTones[i];
-                                var key = (selected.ToneA, selected.ToneB);
-
-                                // ✅ Restore PageState for each tone before playback
-                                foreach (var ch in initiallyActiveChannels)
+                                IPeer peerHandler = _webSocketManager.GetWebSocketHandler(sys.Name);
+                                if (channel.IsSelected && peerHandler.IsConnected)
                                 {
-                                    ch.PageState = true;
-                                    Dispatcher.Invoke(() =>
+                                    Task.Run(() =>
                                     {
-                                        ch.PageSelectButton.Background = ch.orangeGradient;
+                                        GRP_AFF_REQ release = new GRP_AFF_REQ
+                                        {
+                                            SrcId = sys.Rid,
+                                            DstId = cpgChannel.Tgid,
+                                            Site = sys.Site
+                                        };
+                                        peerHandler.SendMessage(release.GetData());
                                     });
-
-                                    // This ensures PageState on the *server* is activated
-                                    ChannelBox_PageButtonClicked(ch, ch);
-                                }
-
-                                if (i > 0)
-                                {
-                                    await Task.Delay(1750); // delay only after the first tone
-                                }
-
-
-                                // ▶️ Play the tone
-                                await PlayTone(selected.ToneA.ToString(), selected.ToneB.ToString());
-
-                                // ❌ Remove from selected set
-                                _selectedToneSets.Remove(key);
-
-                                // 🔄 Deselect tone visually
-                                foreach (var child in ChannelsCanvas.Children)
-                                {
-                                    if (child is ToneSet ts && ts.ToneA == key.ToneA && ts.ToneB == key.ToneB)
-                                    {
-                                        ts.SetSelected(false);
-                                        break;
-                                    }
-                                }
-                            }
-
-                            // 🧹 Final cleanup: clear PageState on all initially active channels
-                            foreach (var ch in initiallyActiveChannels)
-                            {
-                                ch.PageState = false;
-                                Dispatcher.Invoke(() =>
-                                {
-                                    ch.PageSelectButton.Background = ch.grayGradient;
-                                });
-                            }
-                        }
-                        else
-                        {
-                            // 🔁 Single tone fallback
-                            var hasActivePage = _selectedChannelsManager.GetSelectedChannels().Any(c => c.PageState);
-                            if (hasActivePage)
-                            {
-                                await PlayTone(tone.ToneA.ToString(), tone.ToneB.ToString());
-
-                                foreach (var channel in _selectedChannelsManager.GetSelectedChannels())
-                                {
-                                    channel.PageState = false;
-                                    channel.PageSelectButton.Background = channel.grayGradient;
                                 }
                             }
                         }
-                    };
-
-
-                    toneSetControl.SelectToggled += (s, e) =>
-                    {
-                        var key = (tone.ToneA, tone.ToneB);
-                        if (_selectedToneSets.Contains(key))
-                        {
-                            _selectedToneSets.Remove(key);
-                            toneSetControl.SetSelected(false);
-                        }
-                        else
-                        {
-                            _selectedToneSets.Add(key);
-                            toneSetControl.SetSelected(true);
-                        }
-                    };
-
-                    // Position like ToneSet Boxes using same layout logic
-                    if (_settingsManager.QCToneSetPositions.TryGetValue(tone.Name, out var position))
-                    {
-                        Canvas.SetLeft(toneSetControl, position.X);
-                        Canvas.SetTop(toneSetControl, position.Y);
                     }
                     else
                     {
-                        Canvas.SetLeft(toneSetControl, offsetX);
-                        Canvas.SetTop(toneSetControl, offsetY);
+                        systemStatusBox.Background = new SolidColorBrush(Colors.Red);
+                        systemStatusBox.ConnectionState = "Disconnected";
                     }
+                });
+            };
 
-                    toneSetControl.MouseLeftButtonDown += ToneSet_MouseLeftButtonDown;
-                    toneSetControl.MouseMove += ToneSet_MouseMove;
-                    toneSetControl.MouseRightButtonDown += ToneSet_MouseRightButtonDown;
+            handler.OnClose += () =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    systemStatusBox.Background = new SolidColorBrush(Colors.Red);
+                    systemStatusBox.ConnectionState = "Disconnected";
+                });
+            };
 
-                    ChannelsCanvas.Children.Add(toneSetControl);
+            handler.OnOpen += () =>
+            {
+                Console.WriteLine("Peer connected");
+                U_REG_REQ release = new U_REG_REQ
+                {
+                    SrcId = system.Rid,
+                    Site = system.Site
+                };
+                handler.SendMessage(release.GetData());
+            };
 
-                    offsetX += 225;
+            handler.OnReconnecting += () => Console.WriteLine("Peer reconnecting");
 
-                    if (offsetX + 220 > ChannelsCanvas.ActualWidth)
+            Task.Run(() =>
+            {
+                handler.Connect(system.Address, system.Port, system.AuthKey);
+                if (!handler.IsConnected)
+                {
+                    Dispatcher.Invoke(() =>
                     {
-                        offsetX = 20;
-                        offsetY += 106;
-                    }
+                        systemStatusBox.Background = new SolidColorBrush(Colors.Red);
+                        systemStatusBox.ConnectionState = "Disconnected";
+                    });
                 }
+            });
+        }
+
+        private void SetupFneSystem(Codeplug.System system, SystemStatusBox systemStatusBox)
+        {
+            _fneSystemManager.AddFneSystem(system.Name, system, this);
+
+            PeerSystem peer = _fneSystemManager.GetFneSystem(system.Name);
+
+            peer.peer.PeerConnected += (sender, response) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    systemStatusBox.Background = (Brush)new BrushConverter().ConvertFrom("#FF00BC48");
+                    systemStatusBox.ConnectionState = "Connected";
+                });
+            };
+
+            peer.peer.PeerDisconnected += (response) =>
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    systemStatusBox.Background = new SolidColorBrush(Colors.Red);
+                    systemStatusBox.ConnectionState = "Disconnected";
+                });
+            };
+
+            Task.Run(() => peer.Start());
+        }
+
+        private void AddChannelBox(Codeplug.Channel channel, Canvas canvas, ref double offsetX, ref double offsetY)
+        {
+            var channelBox = new ChannelBox(_selectedChannelsManager, _audioManager, channel.Name, channel.System, channel.Tgid);
+            systemStatuses.Add(channel.Name, new SlotStatus());
+
+            if (_settingsManager.ChannelPositions.TryGetValue(channel.Name, out var pos))
+            {
+                Canvas.SetLeft(channelBox, pos.X);
+                Canvas.SetTop(channelBox, pos.Y);
+            }
+            else
+            {
+                Canvas.SetLeft(channelBox, offsetX);
+                Canvas.SetTop(channelBox, offsetY);
             }
 
+            channelBox.PTTButtonClicked += ChannelBox_PTTButtonClicked;
+            channelBox.PageButtonClicked += ChannelBox_PageButtonClicked;
+            channelBox.HoldChannelButtonClicked += ChannelBox_HoldChannelButtonClicked;
 
+            channelBox.MouseLeftButtonDown += ChannelBox_MouseLeftButtonDown;
+            channelBox.MouseMove += ChannelBox_MouseMove;
+            channelBox.MouseRightButtonDown += ChannelBox_MouseRightButtonDown;
 
+            canvas.Children.Add(channelBox);
+
+            offsetX += 225;
+            if (offsetX + 220 > canvas.ActualWidth)
+            {
+                offsetX = 20;
+                offsetY += 106;
+            }
+
+            AdjustCanvasHeight();
+        }
+
+        private void AddPlaybackChannel(double offsetX, double offsetY)
+        {
             playbackChannelBox = new ChannelBox(_selectedChannelsManager, _audioManager, PLAYBACKCHNAME, PLAYBACKSYS, PLAYBACKTG);
 
             if (_settingsManager.ChannelPositions.TryGetValue(PLAYBACKCHNAME, out var pos))
@@ -577,18 +557,284 @@ namespace WhackerLinkConsoleV2
             playbackChannelBox.MouseLeftButtonDown += ChannelBox_MouseLeftButtonDown;
             playbackChannelBox.MouseMove += ChannelBox_MouseMove;
             playbackChannelBox.MouseRightButtonDown += ChannelBox_MouseRightButtonDown;
+
             ChannelsCanvas.Children.Add(playbackChannelBox);
-
-            //offsetX += 225;
-
-            //if (offsetX + 220 > ChannelsCanvas.ActualWidth)
-            //{
-            //    offsetX = 20;
-            //    offsetY += 106;
-            //}
-
-            AdjustCanvasHeight();
         }
+
+        private void AddAlertTones(double offsetX, double offsetY)
+        {
+            if (!_settingsManager.ShowAlertTones) return;
+
+            foreach (var alertPath in _settingsManager.AlertToneFilePaths)
+            {
+                var alertTone = new AlertTone(alertPath) { IsEditMode = isEditMode };
+                alertTone.OnAlertTone += SendAlertTone;
+
+                if (_settingsManager.AlertTonePositions.TryGetValue(alertPath, out var pos))
+                {
+                    Canvas.SetLeft(alertTone, pos.X);
+                    Canvas.SetTop(alertTone, pos.Y);
+                }
+                else
+                {
+                    Canvas.SetLeft(alertTone, 20);
+                    Canvas.SetTop(alertTone, 20);
+                }
+
+                alertTone.MouseRightButtonUp += AlertTone_MouseRightButtonUp;
+                ChannelsCanvas.Children.Add(alertTone);
+            }
+        }
+
+        private void AddToneSets(Canvas zoneCanvas, double offsetX, double offsetY, string zone)
+        {
+            if (!_settingsManager.ShowQCTones || Codeplug?.Tones == null) return;
+            Console.WriteLine($"Zone Name: {zone}");
+            Console.WriteLine($"ShowQCTones: {_settingsManager.ShowQCTones}");
+            Console.WriteLine($"Loaded tones: {Codeplug.Tones?.Count ?? 0}");
+            Console.WriteLine($"Zone canvas size: {zoneCanvas.ActualWidth}x{zoneCanvas.ActualHeight}");
+            Console.WriteLine($"Adding tones for zone: {zone}");
+
+            foreach (var tone in Codeplug.Tones)
+            {
+                Console.WriteLine($"Tone {tone.Name}, AllowedZones: {string.Join(",", tone.AllowedZones)}");
+
+                // Only add tones allowed in this zone
+                if (tone.AllowedZones == null || !tone.AllowedZones.Any(z => string.Equals(z.Trim(), zone.Trim(), StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                var toneSetControl = new ToneSet(tone.Name, tone.ToneA, tone.ToneB);
+
+                // --- Play logic ---
+                toneSetControl.PlayClicked += async (s, e) =>
+                {
+                    if (_selectedToneSets.Count > 0)
+                    {
+                        var selectedTones = _selectedToneSets.ToList();
+                        var initiallyActiveChannels = _selectedChannelsManager
+                            .GetSelectedChannels()
+                            .Where(c => c.PageState)
+                            .ToList();
+
+                        for (int i = 0; i < selectedTones.Count; i++)
+                        {
+                            var selected = selectedTones[i];
+                            var key = (selected.ToneA, selected.ToneB);
+
+                            foreach (var ch in initiallyActiveChannels)
+                            {
+                                ch.PageState = true;
+                                Dispatcher.Invoke(() =>
+                                {
+                                    ch.PageSelectButton.Background = ch.orangeGradient;
+                                });
+                                ChannelBox_PageButtonClicked(ch, ch);
+                            }
+
+                            await Task.Delay(2000);
+                            await PlayTone(selected.ToneA.ToString(), selected.ToneB.ToString());
+
+                            _selectedToneSets.Remove(key);
+
+                            foreach (var child in zoneCanvas.Children)
+                            {
+                                if (child is ToneSet ts && ts.ToneA == key.ToneA && ts.ToneB == key.ToneB)
+                                {
+                                    ts.SetSelected(false);
+                                    break;
+                                }
+                            }
+                        }
+
+                        foreach (var ch in initiallyActiveChannels)
+                        {
+                            ch.PageState = false;
+                            Dispatcher.Invoke(() =>
+                            {
+                                ch.PageSelectButton.Background = ch.grayGradient;
+                            });
+                        }
+                    }
+                    else
+                    {
+                        var hasActivePage = _selectedChannelsManager.GetSelectedChannels().Any(c => c.PageState);
+                        if (hasActivePage)
+                        {
+                            await PlayTone(tone.ToneA.ToString(), tone.ToneB.ToString());
+
+                            foreach (var channel in _selectedChannelsManager.GetSelectedChannels())
+                            {
+                                channel.PageState = false;
+                                channel.PageSelectButton.Background = channel.grayGradient;
+                            }
+                        }
+                    }
+                };
+
+                // --- Select/Toggle logic ---
+                toneSetControl.SelectToggled += (s, e) =>
+                {
+                    var key = (tone.ToneA, tone.ToneB);
+                    if (_selectedToneSets.Contains(key))
+                    {
+                        _selectedToneSets.Remove(key);
+                        toneSetControl.SetSelected(false);
+                    }
+                    else
+                    {
+                        _selectedToneSets.Add(key);
+                        toneSetControl.SetSelected(true);
+                    }
+                };
+
+                // --- Positioning ---
+                if (_settingsManager.QCToneSetPositions.TryGetValue(tone.Name, out var pos))
+                {
+                    Canvas.SetLeft(toneSetControl, pos.X);
+                    Canvas.SetTop(toneSetControl, pos.Y);
+                }
+                else
+                {
+                    Canvas.SetLeft(toneSetControl, offsetX);
+                    Canvas.SetTop(toneSetControl, offsetY);
+                }
+
+                toneSetControl.MouseLeftButtonDown += ToneSet_MouseLeftButtonDown;
+                toneSetControl.MouseMove += ToneSet_MouseMove;
+                toneSetControl.MouseRightButtonDown += ToneSet_MouseRightButtonDown;
+
+                // Add to current zone canvas
+                zoneCanvas.Children.Add(toneSetControl);
+
+                // --- Layout increment ---
+                offsetX += 225;
+                if (offsetX + 220 > zoneCanvas.ActualWidth)
+                {
+                    offsetX = 20;
+                    offsetY += 106;
+                }
+            }
+        }
+
+
+        //private void AddToneSets(Canvas zoneCanvas, double offsetX, double offsetY, string zone)
+        //{
+        //    if (!_settingsManager.ShowQCTones || Codeplug?.Tones == null) return;
+
+        //    foreach (var tone in Codeplug.Tones)
+        //    {
+        //        var toneSetControl = new ToneSet(tone.Name, tone.ToneA, tone.ToneB);
+
+        //        toneSetControl.PlayClicked += async (s, e) =>
+        //        {
+        //            if (_selectedToneSets.Count > 0)
+        //            {
+        //                var selectedTones = _selectedToneSets.ToList();
+        //                var initiallyActiveChannels = _selectedChannelsManager
+        //                    .GetSelectedChannels()
+        //                    .Where(c => c.PageState)
+        //                    .ToList();
+
+        //                for (int i = 0; i < selectedTones.Count; i++)
+        //                {
+        //                    var selected = selectedTones[i];
+        //                    var key = (selected.ToneA, selected.ToneB);
+
+        //                    foreach (var ch in initiallyActiveChannels)
+        //                    {
+        //                        ch.PageState = true;
+        //                        Dispatcher.Invoke(() =>
+        //                        {
+        //                            ch.PageSelectButton.Background = ch.orangeGradient;
+        //                        });
+        //                        ChannelBox_PageButtonClicked(ch, ch);
+        //                    }
+
+        //                    await Task.Delay(2000);
+
+        //                    await PlayTone(selected.ToneA.ToString(), selected.ToneB.ToString());
+
+        //                    _selectedToneSets.Remove(key);
+
+        //                    foreach (var child in ChannelsCanvas.Children)
+        //                    {
+        //                        if (child is ToneSet ts && ts.ToneA == key.ToneA && ts.ToneB == key.ToneB)
+        //                        {
+        //                            ts.SetSelected(false);
+        //                            break;
+        //                        }
+        //                    }
+        //                }
+
+        //                foreach (var ch in initiallyActiveChannels)
+        //                {
+        //                    ch.PageState = false;
+        //                    Dispatcher.Invoke(() =>
+        //                    {
+        //                        ch.PageSelectButton.Background = ch.grayGradient;
+        //                    });
+        //                }
+        //            }
+        //            else
+        //            {
+        //                var hasActivePage = _selectedChannelsManager.GetSelectedChannels().Any(c => c.PageState);
+        //                if (hasActivePage)
+        //                {
+        //                    await PlayTone(tone.ToneA.ToString(), tone.ToneB.ToString());
+
+        //                    foreach (var channel in _selectedChannelsManager.GetSelectedChannels())
+        //                    {
+        //                        channel.PageState = false;
+        //                        channel.PageSelectButton.Background = channel.grayGradient;
+        //                    }
+        //                }
+        //            }
+        //        };
+
+        //        toneSetControl.SelectToggled += (s, e) =>
+        //        {
+        //            var key = (tone.ToneA, tone.ToneB);
+        //            if (_selectedToneSets.Contains(key))
+        //            {
+        //                _selectedToneSets.Remove(key);
+        //                toneSetControl.SetSelected(false);
+        //            }
+        //            else
+        //            {
+        //                _selectedToneSets.Add(key);
+        //                toneSetControl.SetSelected(true);
+        //            }
+        //        };
+
+        //        if (_settingsManager.QCToneSetPositions.TryGetValue(tone.Name, out var pos))
+        //        {
+        //            Canvas.SetLeft(toneSetControl, pos.X);
+        //            Canvas.SetTop(toneSetControl, pos.Y);
+        //        }
+        //        else
+        //        {
+        //            Canvas.SetLeft(toneSetControl, offsetX);
+        //            Canvas.SetTop(toneSetControl, offsetY);
+        //        }
+
+        //        toneSetControl.MouseLeftButtonDown += ToneSet_MouseLeftButtonDown;
+        //        toneSetControl.MouseMove += ToneSet_MouseMove;
+        //        toneSetControl.MouseRightButtonDown += ToneSet_MouseRightButtonDown;
+
+        //        //ChannelsCanvas.Children.Add(toneSetControl);
+
+        //        zoneCanvas.Children.Add(toneSetControl);
+
+        //        offsetX += 225;
+        //        if (offsetX + 220 > zoneCanvas.ActualWidth)
+        //        {
+        //            offsetX = 20;
+        //            offsetY += 106;
+        //        }
+        //    }
+        //}
 
         private const int GridSize = 5;
 
@@ -1522,52 +1768,105 @@ namespace WhackerLinkConsoleV2
 
         private void ChannelBox_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!isEditMode || !(sender is UIElement element)) return;
+            if (!(sender is UIElement element)) return;
 
-            _draggedElement = element;
-            _startPoint = e.GetPosition(ChannelsCanvas);
-            _offsetX = _startPoint.X - Canvas.GetLeft(_draggedElement);
-            _offsetY = _startPoint.Y - Canvas.GetTop(_draggedElement);
-            _isDragging = true;
+            if (isEditMode)
+            {
+                _draggedElement = element;
+                _startPoint = e.GetPosition((UIElement)VisualTreeHelper.GetParent(element));
+                _offsetX = _startPoint.X - Canvas.GetLeft(_draggedElement);
+                _offsetY = _startPoint.Y - Canvas.GetTop(_draggedElement);
+                _isDragging = true;
 
-            element.CaptureMouse();
+                element.CaptureMouse();
+                e.Handled = true; // prevent click from toggling state
+            }
+            else
+            {
+                // Normal channel click behavior (toggle state)
+                // You can leave your ChannelBox click handler here
+            }
         }
+
+
+        //private void ChannelBox_MouseMove(object sender, MouseEventArgs e)
+        //{
+        //    if (!isEditMode || !_isDragging || _draggedElement == null) return;
+
+        //    Point currentPosition = e.GetPosition(ChannelsCanvas);
+
+        //    // Calculate the new position with snapping to the grid
+        //    double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
+        //    double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
+
+        //    // Ensure the box stays within canvas bounds
+        //    newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
+        //    newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
+
+        //    // Apply snapped position
+        //    Canvas.SetLeft(_draggedElement, newLeft);
+        //    Canvas.SetTop(_draggedElement, newTop);
+
+        //    // Save the new position if it's a ChannelBox
+        //    if (_draggedElement is ChannelBox channelBox)
+        //    {
+        //        _settingsManager.UpdateChannelPosition(channelBox.ChannelName, newLeft, newTop);
+        //    }
+
+        //    AdjustCanvasHeight();
+        //}
 
         private void ChannelBox_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!isEditMode || !_isDragging || _draggedElement == null) return;
+            if (!_isDragging || _draggedElement == null) return;
 
-            Point currentPosition = e.GetPosition(ChannelsCanvas);
+            Point currentPosition = e.GetPosition((UIElement)VisualTreeHelper.GetParent(_draggedElement));
 
-            // Calculate the new position with snapping to the grid
             double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
             double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
 
-            // Ensure the box stays within canvas bounds
             newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
             newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
 
-            // Apply snapped position
             Canvas.SetLeft(_draggedElement, newLeft);
             Canvas.SetTop(_draggedElement, newTop);
 
-            // Save the new position if it's a ChannelBox
             if (_draggedElement is ChannelBox channelBox)
-            {
                 _settingsManager.UpdateChannelPosition(channelBox.ChannelName, newLeft, newTop);
-            }
 
             AdjustCanvasHeight();
         }
 
+        private void ChannelBox_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isDragging && _draggedElement != null)
+            {
+                _isDragging = false;
+                _draggedElement.ReleaseMouseCapture();
+                _draggedElement = null;
+                e.Handled = true;
+            }
+        }
+
         private void ChannelBox_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!isEditMode || !_isDragging || _draggedElement == null) return;
-
-            _isDragging = false;
-            _draggedElement.ReleaseMouseCapture();
-            _draggedElement = null;
+            if (_isDragging && _draggedElement != null)
+            {
+                _isDragging = false;
+                _draggedElement.ReleaseMouseCapture();
+                _draggedElement = null;
+                e.Handled = true;
+            }
         }
+
+        //private void ChannelBox_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        //{
+        //    if (!isEditMode || !_isDragging || _draggedElement == null) return;
+
+        //    _isDragging = false;
+        //    _draggedElement.ReleaseMouseCapture();
+        //    _draggedElement = null;
+        //}
 
         private void SystemStatusBox_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => ChannelBox_MouseLeftButtonDown(sender, e);
         private void SystemStatusBox_MouseMove(object sender, MouseEventArgs e) => ChannelBox_MouseMove(sender, e);
@@ -1696,6 +1995,8 @@ namespace WhackerLinkConsoleV2
         private async Task PlayTone(string ToneA, string ToneB)
         {
             var selectedChannels = _selectedChannelsManager.GetSelectedChannels();
+
+            Console.WriteLine($"Playing Tones A={ToneA}, B={ToneB}");
 
             // Check if any selected channel has PageState = true
             if (!selectedChannels.Any(ch => ch.PageState))
@@ -2654,6 +2955,11 @@ namespace WhackerLinkConsoleV2
         private void CallHist_Click(object sender, RoutedEventArgs e)
         {
             callHistoryWindow.Show();
+        }
+
+        private void MenuItem_Click(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 }
