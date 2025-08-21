@@ -301,7 +301,6 @@ namespace WhackerLinkConsoleV2.Controls
         {
             if (!IsSelected) return;
             
-
             PageState = !PageState;
             PageButtonClicked.Invoke(sender, this);
         }
