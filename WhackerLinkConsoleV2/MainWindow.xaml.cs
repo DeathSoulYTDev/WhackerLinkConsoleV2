@@ -215,8 +215,11 @@ namespace WhackerLinkConsoleV2
                 // 1. Add System Status Boxes (global)
                 foreach (var system in Codeplug.Systems)
                 {
-                    AddSystemBox(system, ref globalOffsetX, ref globalOffsetY);
+                    AddSystemBox(GetSystemCanvas(), system, ref globalOffsetX, ref globalOffsetY);
                 }
+
+                AddPlaybackChannel(GetSystemCanvas(), ref globalOffsetX, ref globalOffsetY);
+                AddAlertTones(GetSystemCanvas(), ref globalOffsetX, ref globalOffsetY);
 
                 // 2. Add Zone Tabs
                 foreach (var zone in Codeplug.Zones)
@@ -226,14 +229,16 @@ namespace WhackerLinkConsoleV2
                     var scrollViewer = new ScrollViewer
                     {
                         VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                         HorizontalAlignment = HorizontalAlignment.Stretch,
+                        VerticalAlignment = VerticalAlignment.Stretch
                     };
 
                     var zoneCanvas = new Canvas
                     {
                         Background = Brushes.Transparent,
-                        Width = 1000,
-                        Height = 800
+                        Width = Double.NaN,   // stretch width to parent
+                        Height = Double.NaN   // let height expand with content
                     };
 
                     scrollViewer.Content = zoneCanvas;
@@ -246,7 +251,7 @@ namespace WhackerLinkConsoleV2
                     // Add channels first
                     foreach (var channel in zone.Channels)
                     {
-                        AddChannelBox(channel, zoneCanvas, ref offsetX, ref offsetY);
+                        AddChannelBox(zoneCanvas, channel, ref offsetX, ref offsetY);
                     }
 
                     // Then add tones once for the zone
@@ -263,16 +268,88 @@ namespace WhackerLinkConsoleV2
                             if (sv.ViewportHeight > c.Height) c.Height = sv.ViewportHeight;
                         }
                     };
+
+                    scrollViewer.Loaded += (s, e) =>
+                    {
+                        var sv = s as ScrollViewer;
+                        if (sv.Content is Canvas c)
+                        {
+                            if (sv.ViewportWidth > c.Width) c.Width = sv.ViewportWidth;
+                            if (sv.ViewportHeight > c.Height) c.Height = sv.ViewportHeight;
+                        }
+                    };
+
+                    // Handle resizing dynamically (width only, height stays flexible)
+                    scrollViewer.SizeChanged += (s, e) =>
+                    {
+                        var sv = s as ScrollViewer;
+                        if (sv.Content is Canvas c)
+                        {
+                            if (sv.ViewportWidth > c.Width) c.Width = sv.ViewportWidth;
+                            if (sv.ViewportHeight > c.Height) c.Height = sv.ViewportHeight;
+                        }
+                    };
                 }
             }
         }
 
         // ---------------------- Helper Methods ----------------------
 
-        private void AddSystemBox(Codeplug.System system, ref double offsetX, ref double offsetY)
+        private Canvas CreateSystemTab()
+        {
+            // Check if SYSTEMS tab already exists
+            var existingTab = ChannelsTabControl.Items
+                .OfType<TabItem>()
+                .FirstOrDefault(t => t.Header?.ToString() == "SYSTEMS");
+
+            if (existingTab != null && existingTab.Content is ScrollViewer sv && sv.Content is Canvas existingCanvas)
+                return existingCanvas; // reuse existing canvas
+
+            // Create new SYSTEMS tab
+            var tabItem = new TabItem { Header = "SYSTEMS" };
+
+            var scrollViewer = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
+
+            var zoneCanvas = new Canvas
+            {
+                Background = Brushes.Transparent,
+                Width = Double.NaN,   // allow canvas to stretch horizontally
+                Height = Double.NaN   // let height expand with content
+            };
+
+            scrollViewer.Content = zoneCanvas;
+            tabItem.Content = scrollViewer;
+            ChannelsTabControl.Items.Add(tabItem);
+
+            return zoneCanvas;
+        }
+
+        private Canvas GetSystemCanvas()
+        {
+            // Just call CreateSystemTab which handles existing or new tab
+            return CreateSystemTab();
+        }
+
+
+        private void AddSystemBox(Canvas zoneCanvas, Codeplug.System system, ref double offsetX, ref double offsetY)
         {
             var systemStatusBox = new SystemStatusBox(system.Name, system.Address, system.Port);
 
+            // Find the first tab named "SYSTEM"
+            var systemTab = ChannelsTabControl.Items
+                .OfType<TabItem>()
+                .FirstOrDefault(t => t.Header?.ToString() == "SYSTEMS");
+
+            if (systemTab == null)
+                return; // no SYSTEM tab, exit early
+
+            // Set position
             if (_settingsManager.SystemStatusPositions.TryGetValue(system.Name, out var pos))
             {
                 Canvas.SetLeft(systemStatusBox, pos.X);
@@ -284,27 +361,33 @@ namespace WhackerLinkConsoleV2
                 Canvas.SetTop(systemStatusBox, offsetY);
             }
 
+            // Hook events
             systemStatusBox.MouseLeftButtonDown += SystemStatusBox_MouseLeftButtonDown;
             systemStatusBox.MouseMove += SystemStatusBox_MouseMove;
             systemStatusBox.MouseRightButtonDown += SystemStatusBox_MouseRightButtonDown;
 
-            ChannelsCanvas.Children.Add(systemStatusBox);
+            // Add to the SYSTEM tab's canvas
+            zoneCanvas.Children.Add(systemStatusBox);
 
+            // Update offsets
             offsetX += 225;
-            if (offsetX + 220 > ChannelsCanvas.ActualWidth)
+            if (offsetX + 220 > zoneCanvas.ActualWidth)
             {
                 offsetX = 20;
                 offsetY += 106;
             }
 
+            // Load aliases
             if (File.Exists(system.AliasPath))
                 system.RidAlias = AliasTools.LoadAliases(system.AliasPath);
 
+            // Setup system
             if (!system.IsDvm)
                 SetupWebSocketHandler(system, systemStatusBox);
             else
                 SetupFneSystem(system, systemStatusBox);
 
+            // Apply visibility
             if (!_settingsManager.ShowSystemStatus)
                 systemStatusBox.Visibility = Visibility.Collapsed;
         }
@@ -430,7 +513,7 @@ namespace WhackerLinkConsoleV2
             Task.Run(() => peer.Start());
         }
 
-        private void AddChannelBox(Codeplug.Channel channel, Canvas canvas, ref double offsetX, ref double offsetY)
+        private void AddChannelBox(Canvas tabCanvas, Codeplug.Channel channel, ref double offsetX, ref double offsetY)
         {
             var channelBox = new ChannelBox(_selectedChannelsManager, _audioManager, channel.Name, channel.System, channel.Tgid);
             systemStatuses.Add(channel.Name, new SlotStatus());
@@ -454,19 +537,19 @@ namespace WhackerLinkConsoleV2
             channelBox.MouseMove += ChannelBox_MouseMove;
             channelBox.MouseRightButtonDown += ChannelBox_MouseRightButtonDown;
 
-            canvas.Children.Add(channelBox);
+            // Add to current zone canvas
+            tabCanvas.Children.Add(channelBox);
 
+            // --- Layout increment ---
             offsetX += 225;
-            if (offsetX + 220 > canvas.ActualWidth)
+            if (offsetX + 220 > tabCanvas.ActualWidth)
             {
                 offsetX = 20;
                 offsetY += 106;
             }
-
-            AdjustCanvasHeight();
         }
 
-        private void AddPlaybackChannel(double offsetX, double offsetY)
+        private void AddPlaybackChannel(Canvas tabCanvas, ref double offsetX, ref double offsetY)
         {
             playbackChannelBox = new ChannelBox(_selectedChannelsManager, _audioManager, PLAYBACKCHNAME, PLAYBACKSYS, PLAYBACKTG);
 
@@ -489,10 +572,17 @@ namespace WhackerLinkConsoleV2
             playbackChannelBox.MouseMove += ChannelBox_MouseMove;
             playbackChannelBox.MouseRightButtonDown += ChannelBox_MouseRightButtonDown;
 
-            ChannelsCanvas.Children.Add(playbackChannelBox);
+            tabCanvas.Children.Add(playbackChannelBox);
+
+            offsetX += 225;
+            if (offsetX + 220 > tabCanvas.ActualWidth)
+            {
+                offsetX = 20;
+                offsetY += 106;
+            }
         }
 
-        private void AddAlertTones(double offsetX, double offsetY)
+        private void AddAlertTones(Canvas tabCanvas, ref double offsetX, ref double offsetY)
         {
             if (!_settingsManager.ShowAlertTones) return;
 
@@ -513,7 +603,7 @@ namespace WhackerLinkConsoleV2
                 }
 
                 alertTone.MouseRightButtonUp += AlertTone_MouseRightButtonUp;
-                ChannelsCanvas.Children.Add(alertTone);
+                tabCanvas.Children.Add(alertTone);
             }
         }
 
@@ -564,7 +654,10 @@ namespace WhackerLinkConsoleV2
                                 ChannelBox_PageButtonClicked(ch, ch);
                             }
 
-                            await Task.Delay(2000);
+                            if (i > 1) {
+                                await Task.Delay(2000);
+                            }
+
                             await PlayTone(selected.ToneA.ToString(), selected.ToneB.ToString());
 
                             _selectedToneSets.Remove(key);
@@ -668,28 +761,46 @@ namespace WhackerLinkConsoleV2
         {
             if (!isEditMode || !_isDragging || _draggedElement == null) return;
 
-            Point currentPosition = e.GetPosition(ChannelsCanvas);
+            // Find the canvas containing this element
+            Canvas zoneCanvas = null;
+            DependencyObject parent = _draggedElement;
+            while (parent != null)
+            {
+                parent = VisualTreeHelper.GetParent(parent);
+                if (parent is Canvas canvas)
+                {
+                    zoneCanvas = canvas;
+                    break;
+                }
+            }
+            if (zoneCanvas == null) return;
 
-            // Calculate the new position with snapping to the grid
-            double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
-            double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
+            // Mouse position relative to the canvas
+            Point mousePos = e.GetPosition(zoneCanvas);
 
-            // Ensure the box stays within canvas bounds
-            newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
-            newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
+            // Center the ToneSet on the cursor
+            double newLeft = mousePos.X - (_draggedElement.RenderSize.Width / 2);
+            double newTop = mousePos.Y - (_draggedElement.RenderSize.Height / 2);
 
-            // Apply snapped position
+            // Snap to grid
+            newLeft = Math.Round(newLeft / GridSize) * GridSize;
+            newTop = Math.Round(newTop / GridSize) * GridSize;
+
+            // Clamp to canvas bounds
+            newLeft = Math.Max(0, Math.Min(newLeft, zoneCanvas.ActualWidth - _draggedElement.RenderSize.Width));
+            newTop = Math.Max(0, Math.Min(newTop, zoneCanvas.ActualHeight - _draggedElement.RenderSize.Height));
+
+            // Apply new position
             Canvas.SetLeft(_draggedElement, newLeft);
             Canvas.SetTop(_draggedElement, newTop);
 
-            // Save the new position if it's a ToneSet
+            // Save the new position
             if (_draggedElement is ToneSet toneSet)
-            {
                 _settingsManager.UpdateQCToneSetPosition(toneSet.ToneName, newLeft, newTop);
-            }
 
             AdjustCanvasHeight();
         }
+
 
         private void ToneSet_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -1579,26 +1690,38 @@ namespace WhackerLinkConsoleV2
             }
         }
 
+        //private void ChannelBox_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        //{
+
+        //    if (!isEditMode || !(sender is UIElement element)) return;
+
+        //    _draggedElement = element;
+        //    _startPoint = e.GetPosition(ChannelsCanvas);
+        //    _offsetX = _startPoint.X - Canvas.GetLeft(_draggedElement);
+        //    _offsetY = _startPoint.Y - Canvas.GetTop(_draggedElement);
+        //    _isDragging = true;
+
+        //    element.CaptureMouse();
+        //}
+
         private void ChannelBox_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!(sender is UIElement element)) return;
+            if (!isEditMode || !(sender is UIElement element)) return;
 
-            if (isEditMode)
-            {
-                _draggedElement = element;
-                _startPoint = e.GetPosition((UIElement)VisualTreeHelper.GetParent(element));
-                _offsetX = _startPoint.X - Canvas.GetLeft(_draggedElement);
-                _offsetY = _startPoint.Y - Canvas.GetTop(_draggedElement);
-                _isDragging = true;
+            _draggedElement = element;
+            _startPoint = e.GetPosition(ChannelsCanvas);
 
-                element.CaptureMouse();
-                e.Handled = true; // prevent click from toggling state
-            }
-            else
-            {
-                // Normal channel click behavior (toggle state)
-                // You can leave your ChannelBox click handler here
-            }
+            // Fix: if Left/Top are NaN, treat as 0
+            double left = Canvas.GetLeft(_draggedElement);
+            if (double.IsNaN(left)) left = 0;
+            double top = Canvas.GetTop(_draggedElement);
+            if (double.IsNaN(top)) top = 0;
+
+            _offsetX = _startPoint.X - left;
+            _offsetY = _startPoint.Y - top;
+
+            _isDragging = true;
+            element.CaptureMouse();
         }
 
 
@@ -1606,80 +1729,109 @@ namespace WhackerLinkConsoleV2
         //{
         //    if (!isEditMode || !_isDragging || _draggedElement == null) return;
 
+        //    //Point current = e.GetPosition(ChannelsCanvas);
         //    Point currentPosition = e.GetPosition(ChannelsCanvas);
 
-        //    // Calculate the new position with snapping to the grid
+        //    // snap to grid
         //    double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
         //    double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
 
-        //    // Ensure the box stays within canvas bounds
+        //    // keep inside canvas
+        //    //newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
         //    newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
         //    newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
+        //    //newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
 
-        //    // Apply snapped position
         //    Canvas.SetLeft(_draggedElement, newLeft);
         //    Canvas.SetTop(_draggedElement, newTop);
 
-        //    // Save the new position if it's a ChannelBox
-        //    if (_draggedElement is ChannelBox channelBox)
-        //    {
-        //        _settingsManager.UpdateChannelPosition(channelBox.ChannelName, newLeft, newTop);
-        //    }
+        //    if (_draggedElement is ChannelBox cb)
+        //        _settingsManager.UpdateChannelPosition(cb.ChannelName, newLeft, newTop);
 
         //    AdjustCanvasHeight();
         //}
 
         private void ChannelBox_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!_isDragging || _draggedElement == null) return;
+            if (!isEditMode || !_isDragging || _draggedElement == null) return;
 
-            Point currentPosition = e.GetPosition((UIElement)VisualTreeHelper.GetParent(_draggedElement));
+            // Find the canvas containing this element
+            Canvas zoneCanvas = null;
+            DependencyObject parent = _draggedElement;
+            while (parent != null)
+            {
+                parent = VisualTreeHelper.GetParent(parent);
+                if (parent is Canvas canvas)
+                {
+                    zoneCanvas = canvas;
+                    break;
+                }
+            }
+            if (zoneCanvas == null) return;
 
-            double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
-            double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
+            // Mouse position relative to the canvas
+            Point mousePos = e.GetPosition(zoneCanvas);
 
-            newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
-            newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
+            // Center the element on the cursor
+            double newLeft = mousePos.X - (_draggedElement.RenderSize.Width / 2);
+            double newTop = mousePos.Y - (_draggedElement.RenderSize.Height / 2);
 
+            // Snap to grid
+            newLeft = Math.Round(newLeft / GridSize) * GridSize;
+            newTop = Math.Round(newTop / GridSize) * GridSize;
+
+            // Clamp to canvas bounds
+            newLeft = Math.Max(0, Math.Min(newLeft, zoneCanvas.ActualWidth - _draggedElement.RenderSize.Width));
+            newTop = Math.Max(0, Math.Min(newTop, zoneCanvas.ActualHeight - _draggedElement.RenderSize.Height));
+
+            // Apply new position
             Canvas.SetLeft(_draggedElement, newLeft);
             Canvas.SetTop(_draggedElement, newTop);
 
-            if (_draggedElement is ChannelBox channelBox)
-                _settingsManager.UpdateChannelPosition(channelBox.ChannelName, newLeft, newTop);
+            if (_draggedElement is ChannelBox cb)
+                _settingsManager.UpdateChannelPosition(cb.ChannelName, newLeft, newTop);
 
             AdjustCanvasHeight();
         }
 
-        private void ChannelBox_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_isDragging && _draggedElement != null)
-            {
-                _isDragging = false;
-                _draggedElement.ReleaseMouseCapture();
-                _draggedElement = null;
-                e.Handled = true;
-            }
-        }
 
-        private void ChannelBox_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (_isDragging && _draggedElement != null)
-            {
-                _isDragging = false;
-                _draggedElement.ReleaseMouseCapture();
-                _draggedElement = null;
-                e.Handled = true;
-            }
-        }
-
-        //private void ChannelBox_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        //private void ChannelBox_MouseMove(object sender, MouseEventArgs e)
         //{
         //    if (!isEditMode || !_isDragging || _draggedElement == null) return;
 
-        //    _isDragging = false;
-        //    _draggedElement.ReleaseMouseCapture();
-        //    _draggedElement = null;
+        //    // current mouse position relative to canvas
+        //    Point currentPosition = e.GetPosition(ChannelsCanvas);
+
+        //    // calculate new pos using element-relative offset
+        //    double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
+        //    double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
+
+        //    // snap to grid
+        //    //newLeft = Math.Round(newLeft / GridSize) * GridSize;
+        //    //newTop = Math.Round(newTop / GridSize) * GridSize;
+
+        //    // clamp to canvas bounds
+        //    newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
+        //    newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
+
+        //    Canvas.SetLeft(_draggedElement, newLeft);
+        //    Canvas.SetTop(_draggedElement, newTop);
+
+        //    if (_draggedElement is ChannelBox cb)
+        //        _settingsManager.UpdateChannelPosition(cb.ChannelName, newLeft, newTop);
+
+        //    AdjustCanvasHeight();
         //}
+
+
+        private void ChannelBox_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!isEditMode || !_isDragging || _draggedElement == null) return;
+
+            _isDragging = false;
+            _draggedElement.ReleaseMouseCapture();
+            _draggedElement = null;
+        }
 
         private void SystemStatusBox_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => ChannelBox_MouseLeftButtonDown(sender, e);
         private void SystemStatusBox_MouseMove(object sender, MouseEventArgs e) => ChannelBox_MouseMove(sender, e);

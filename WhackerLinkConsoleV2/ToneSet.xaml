@@ -15,26 +15,20 @@
                     <Image Source="pack://application:,,,/WhackerLinkConsoleV2;component/Assets/pager.png" Width="20" Height="42"/>
                 </Button>
                 <Button Width="40" Height="40" x:Name="ToneSetSelectBtn" Click="ToneSetSelectBtn_Click" BorderThickness="0,0,0,0" Margin="5,0,0,0">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Background" Value="LightGray"/>
+                    <Button.Resources>
+                        <Style TargetType="{x:Type Border}">
+                            <Setter Property="CornerRadius" Value="2"/>
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding _isSelected, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
-                                    <Setter Property="Background" Value="LightGreen"/>
-                                </DataTrigger>
                                 <DataTrigger Binding="{Binding _isSelected, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
                                     <Setter Property="Background" Value="LightGreen"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
-                    </Button.Style>
-                    <Button.Resources>
-                        <Style TargetType="{x:Type Border}">
-                            <Setter Property="CornerRadius" Value="2"/>
-                        </Style>
+
                     </Button.Resources>
                     <Image Source="pack://application:,,,/WhackerLinkConsoleV2;component/Assets/dualpage.png" Width="20" Height="42"/>
                 </Button>
+
             </StackPanel>
 
         </StackPanel>
