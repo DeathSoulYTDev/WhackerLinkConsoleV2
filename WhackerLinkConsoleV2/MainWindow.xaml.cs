@@ -1724,33 +1724,6 @@ namespace WhackerLinkConsoleV2
             element.CaptureMouse();
         }
 
-
-        //private void ChannelBox_MouseMove(object sender, MouseEventArgs e)
-        //{
-        //    if (!isEditMode || !_isDragging || _draggedElement == null) return;
-
-        //    //Point current = e.GetPosition(ChannelsCanvas);
-        //    Point currentPosition = e.GetPosition(ChannelsCanvas);
-
-        //    // snap to grid
-        //    double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
-        //    double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
-
-        //    // keep inside canvas
-        //    //newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
-        //    newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
-        //    newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
-        //    //newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
-
-        //    Canvas.SetLeft(_draggedElement, newLeft);
-        //    Canvas.SetTop(_draggedElement, newTop);
-
-        //    if (_draggedElement is ChannelBox cb)
-        //        _settingsManager.UpdateChannelPosition(cb.ChannelName, newLeft, newTop);
-
-        //    AdjustCanvasHeight();
-        //}
-
         private void ChannelBox_MouseMove(object sender, MouseEventArgs e)
         {
             if (!isEditMode || !_isDragging || _draggedElement == null) return;
@@ -1793,36 +1766,6 @@ namespace WhackerLinkConsoleV2
 
             AdjustCanvasHeight();
         }
-
-
-        //private void ChannelBox_MouseMove(object sender, MouseEventArgs e)
-        //{
-        //    if (!isEditMode || !_isDragging || _draggedElement == null) return;
-
-        //    // current mouse position relative to canvas
-        //    Point currentPosition = e.GetPosition(ChannelsCanvas);
-
-        //    // calculate new pos using element-relative offset
-        //    double newLeft = Math.Round((currentPosition.X - _offsetX) / GridSize) * GridSize;
-        //    double newTop = Math.Round((currentPosition.Y - _offsetY) / GridSize) * GridSize;
-
-        //    // snap to grid
-        //    //newLeft = Math.Round(newLeft / GridSize) * GridSize;
-        //    //newTop = Math.Round(newTop / GridSize) * GridSize;
-
-        //    // clamp to canvas bounds
-        //    newLeft = Math.Max(0, Math.Min(newLeft, ChannelsCanvas.ActualWidth - _draggedElement.RenderSize.Width));
-        //    newTop = Math.Max(0, Math.Min(newTop, ChannelsCanvas.ActualHeight - _draggedElement.RenderSize.Height));
-
-        //    Canvas.SetLeft(_draggedElement, newLeft);
-        //    Canvas.SetTop(_draggedElement, newTop);
-
-        //    if (_draggedElement is ChannelBox cb)
-        //        _settingsManager.UpdateChannelPosition(cb.ChannelName, newLeft, newTop);
-
-        //    AdjustCanvasHeight();
-        //}
-
 
         private void ChannelBox_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
