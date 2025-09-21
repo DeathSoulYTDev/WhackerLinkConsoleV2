@@ -4,7 +4,7 @@
              Width="220" Height="100" Background="#FF0B004B">
     <!-- Border wraps the entire Grid -->
     <Border BorderBrush="Gray" BorderThickness="1,1,1,1" CornerRadius="0">
-        <Grid Margin="2">
+        <Grid Margin="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="41"/>
                 <ColumnDefinition/>

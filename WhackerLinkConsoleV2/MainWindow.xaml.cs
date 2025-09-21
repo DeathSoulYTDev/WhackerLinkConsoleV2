@@ -50,6 +50,8 @@ using NWaves.Signals;
 using static WhackerLinkConsoleV2.P25Crypto;
 //using static WhackerLinkLib.Models.Radio.Codeplug;
 using System.Threading.Channels;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media.Animation;
 
 namespace WhackerLinkConsoleV2
 {
@@ -108,6 +110,9 @@ namespace WhackerLinkConsoleV2
             ConsoleNative.ShowConsole();
 #endif
             InitializeComponent();
+            ChannelsTabControl.Loaded += (s, e) => UpdateIndicator(false);
+            ChannelsTabControl.SelectionChanged += (s, e) => UpdateIndicator(true);
+            //ChannelsTabControl.SelectionChanged += ChannelsTabControl_SelectionChanged;
 
             _settingsManager.LoadSettings();
 
@@ -138,6 +143,59 @@ namespace WhackerLinkConsoleV2
 
             _selectedChannelsManager.SelectedChannelsChanged += SelectedChannelsChanged;
             Loaded += MainWindow_Loaded;
+        }
+
+
+        private void ChannelsTabControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            UpdateIndicator(false);
+        }
+
+        private void ChannelsTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateIndicator(true);
+        }
+
+        private void UpdateIndicator(bool animate)
+        {
+            var indicator = ChannelsTabControl.Template.FindName("SelectionIndicator", ChannelsTabControl) as Border;
+            var transform = indicator?.RenderTransform as TranslateTransform;
+            if (indicator == null || transform == null) return;
+
+            if (ChannelsTabControl.SelectedItem is TabItem selectedTab)
+            {
+                // Force layout update to get correct ActualWidth
+                selectedTab.UpdateLayout();
+                ChannelsTabControl.UpdateLayout();
+
+                // Measure tab position relative to TabControl (not TabPanel)
+                var tabPos = selectedTab.TransformToAncestor(ChannelsTabControl).Transform(new Point(0, 0));
+                double targetX = tabPos.X;
+                double targetWidth = selectedTab.ActualWidth;
+
+                if (animate)
+                {
+                    // Animate horizontal position
+                    var animX = new DoubleAnimation(transform.X, targetX, TimeSpan.FromMilliseconds(250))
+                    {
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+                    };
+                    transform.BeginAnimation(TranslateTransform.XProperty, animX);
+
+                    // Animate width
+                    var animW = new DoubleAnimation(indicator.Width, targetWidth, TimeSpan.FromMilliseconds(250))
+                    {
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+                    };
+                    indicator.BeginAnimation(FrameworkElement.WidthProperty, animW);
+                }
+                else
+                {
+                    // Snap immediately (for startup)
+                    transform.X = targetX;
+                    indicator.Width = targetWidth;
+                }
+            }
         }
 
         private class YamlConfig
@@ -1767,6 +1825,7 @@ namespace WhackerLinkConsoleV2
             AdjustCanvasHeight();
         }
 
+
         private void ChannelBox_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (!isEditMode || !_isDragging || _draggedElement == null) return;
@@ -2150,7 +2209,7 @@ namespace WhackerLinkConsoleV2
                     {
                         Dispatcher.Invoke(() =>
                         {
-                            btnGlobalPtt.Background = channel.grayGradient;
+                            btnGlobalPtt.Background = (Brush)new BrushConverter().ConvertFrom("#888888");
                         });
 
                         GRP_VCH_RLS release = new GRP_VCH_RLS

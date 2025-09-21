@@ -36,8 +36,8 @@ namespace WhackerLinkConsoleV2.Controls
                 EndPoint = new Point(0.5, 1)
             };
 
-            grayGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FFF0F0F0"), 0.485));
-            grayGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FFDCDCDC"), 0.517));
+            grayGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#888888"), 0.485));
+            grayGradient.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#888888"), 0.517));
 
             orangeGradient = new LinearGradientBrush
             {
