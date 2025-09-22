@@ -1,3 +1,5 @@
+# for Lib please replace the Lib folder from this repo with the one linked below
+
 # WhackerLink Console V2
 ### WhackerLink Dispatch Console
 ![console](./images/consolehome.JPG)
